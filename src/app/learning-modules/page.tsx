@@ -234,9 +234,9 @@ function LearningModulesContent() {
               </div>
               <div className="mt-4">
                 <ImageGenerator 
-                  description={imageDescription} 
-                  onImageGenerated={(url) => setVideoImageUrl(url)} 
-                />
+                    description={imageDescription} 
+                    placeholderImage="/api/placeholder/400/300"
+                  />
               </div>
             </div>
           </div>

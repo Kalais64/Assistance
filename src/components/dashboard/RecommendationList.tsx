@@ -1,17 +1,20 @@
 import React from 'react';
+import { ExternalLink } from 'lucide-react';
 
 interface Recommendation {
   id: string;
   title: string;
   type: 'lesson' | 'quiz' | 'soft-skill';
   description: string;
+  url?: string; // External URL for the recommendation
 }
 
 interface RecommendationListProps {
   recommendations: Recommendation[];
+  onStartRecommendation?: (recommendation: Recommendation) => void;
 }
 
-export default function RecommendationList({ recommendations }: RecommendationListProps) {
+export default function RecommendationList({ recommendations, onStartRecommendation }: RecommendationListProps) {
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'lesson':
@@ -22,6 +25,18 @@ export default function RecommendationList({ recommendations }: RecommendationLi
         return 'bg-purple-100 text-purple-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleStartClick = (recommendation: Recommendation) => {
+    if (recommendation.url) {
+      // Open external URL in new tab
+      window.open(recommendation.url, '_blank', 'noopener,noreferrer');
+    }
+    
+    // Call the callback if provided
+    if (onStartRecommendation) {
+      onStartRecommendation(recommendation);
     }
   };
 
@@ -55,12 +70,13 @@ export default function RecommendationList({ recommendations }: RecommendationLi
                 <p className="text-sm text-gray-500 truncate">{recommendation.description}</p>
               </div>
               <div>
-                <a
-                  href="#"
-                  className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10"
+                <button
+                  onClick={() => handleStartClick(recommendation)}
+                  className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 hover:bg-indigo-100 transition-colors cursor-pointer"
                 >
                   Start
-                </a>
+                  {recommendation.url && <ExternalLink className="w-3 h-3" />}
+                </button>
               </div>
             </div>
           </li>

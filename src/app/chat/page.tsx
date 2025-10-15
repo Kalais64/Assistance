@@ -120,8 +120,8 @@ function ChatContent() {
       </div>
       <div className="border-t border-gray-200 bg-white">
         <div className="max-w-3xl mx-auto p-4">
-          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-        </div>
+           <ChatInput onSendMessage={handleSendMessage} />
+         </div>
       </div>
     </div>
   );
