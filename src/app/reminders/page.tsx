@@ -1,48 +1,121 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PlusIcon, TrashIcon, BellIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '@/contexts/AuthContext';
+import { remindersService, type FirebaseReminder } from '@/lib/firestore';
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface Reminder {
-  id: number;
+  id: string;
   title: string;
   date: string;
   completed: boolean;
 }
 
 export default function RemindersPage() {
-  const [reminders, setReminders] = useState<Reminder[]>([
-    { id: 1, title: 'Complete JavaScript tutorial', date: '2024-07-15', completed: false },
-    { id: 2, title: 'Review React concepts', date: '2024-07-18', completed: false },
-    { id: 3, title: 'Practice coding problems', date: '2024-07-20', completed: true },
-  ]);
+  const { user } = useAuth();
+  const { showSuccess, showError } = useNotifications();
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [newReminder, setNewReminder] = useState({ title: '', date: '' });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const addReminder = () => {
-    if (newReminder.title && newReminder.date) {
+  // Load reminders when user is authenticated
+  useEffect(() => {
+    if (!user) {
+      // If no user, use sample data
+      setReminders([
+        { id: '1', title: 'Complete JavaScript tutorial', date: '2024-07-15', completed: false },
+        { id: '2', title: 'Review React concepts', date: '2024-07-18', completed: false },
+        { id: '3', title: 'Practice coding problems', date: '2024-07-20', completed: true },
+      ]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Subscribe to real-time updates for reminders
+    const unsubscribe = remindersService.subscribeToReminders(user.uid, (firebaseReminders) => {
+      const formattedReminders = firebaseReminders.map(reminder => ({
+        id: reminder.id!,
+        title: reminder.title,
+        date: reminder.datetime.split('T')[0], // Extract date part
+        completed: reminder.completed,
+      }));
+      setReminders(formattedReminders);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const addReminder = async () => {
+    if (!newReminder.title || !newReminder.date) return;
+
+    if (!user) {
+      // For non-authenticated users, just update local state
       setReminders([
         ...reminders,
         {
-          id: Date.now(),
+          id: Date.now().toString(),
           title: newReminder.title,
           date: newReminder.date,
           completed: false,
         },
       ]);
       setNewReminder({ title: '', date: '' });
+      showSuccess('Reminder Added', 'Your reminder has been saved.');
+      return;
+    }
+
+    try {
+      await remindersService.addReminder(user.uid, {
+        title: newReminder.title,
+        datetime: `${newReminder.date}T09:00:00`, // Default to 9 AM
+        priority: 'medium',
+        completed: false,
+      });
+      setNewReminder({ title: '', date: '' });
+      showSuccess('Reminder Added', 'Your reminder has been saved.');
+    } catch (error) {
+      showError('Error', 'Failed to add reminder. Please try again.');
     }
   };
 
-  const toggleComplete = (id: number) => {
-    setReminders(
-      reminders.map((reminder) =>
-        reminder.id === id ? { ...reminder, completed: !reminder.completed } : reminder
-      )
-    );
+  const toggleComplete = async (id: string) => {
+    if (!user) {
+      // For non-authenticated users, just update local state
+      setReminders(
+        reminders.map((reminder) =>
+          reminder.id === id ? { ...reminder, completed: !reminder.completed } : reminder
+        )
+      );
+      return;
+    }
+
+    try {
+      const reminder = reminders.find(r => r.id === id);
+      if (reminder) {
+        await remindersService.updateReminder(id, { completed: !reminder.completed });
+      }
+    } catch (error) {
+      showError('Error', 'Failed to update reminder. Please try again.');
+    }
   };
 
-  const deleteReminder = (id: number) => {
-    setReminders(reminders.filter((reminder) => reminder.id !== id));
+  const deleteReminder = async (id: string) => {
+    if (!user) {
+      // For non-authenticated users, just update local state
+      setReminders(reminders.filter((reminder) => reminder.id !== id));
+      showSuccess('Reminder Deleted', 'Your reminder has been removed.');
+      return;
+    }
+
+    try {
+      await remindersService.deleteReminder(id);
+      showSuccess('Reminder Deleted', 'Your reminder has been removed.');
+    } catch (error) {
+      showError('Error', 'Failed to delete reminder. Please try again.');
+    }
   };
 
   return (
@@ -50,6 +123,8 @@ export default function RemindersPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-blue-700 mb-2">Learning Reminders</h1>
         <p className="text-gray-600">Keep track of your learning schedule and never miss important study sessions.</p>
+        {user && <p className="text-sm text-green-600 mt-1">✓ Data synced to your account</p>}
+        {!user && <p className="text-sm text-orange-600 mt-1">⚠ Sign in to save your reminders permanently</p>}
       </div>
 
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -80,7 +155,9 @@ export default function RemindersPage() {
 
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Reminders</h2>
-        {reminders.length === 0 ? (
+        {isLoading ? (
+          <p className="text-gray-500 text-center py-6">Loading reminders...</p>
+        ) : reminders.length === 0 ? (
           <p className="text-gray-500 text-center py-6">No reminders yet. Add one to get started!</p>
         ) : (
           <ul className="divide-y divide-gray-200">
@@ -91,21 +168,21 @@ export default function RemindersPage() {
                     type="checkbox"
                     checked={reminder.completed}
                     onChange={() => toggleComplete(reminder.id)}
-                    className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500 mr-3"
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
                   />
-                  <div>
-                    <p className={`text-lg ${reminder.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                  <div className="flex-1">
+                    <h3 className={`text-lg font-medium ${reminder.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                       {reminder.title}
-                    </p>
-                    <div className="flex items-center text-sm text-gray-500">
+                    </h3>
+                    <p className="text-sm text-gray-500 flex items-center">
                       <BellIcon className="h-4 w-4 mr-1" />
-                      <span>{new Date(reminder.date).toLocaleDateString()}</span>
-                    </div>
+                      {new Date(reminder.date).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
                 <button
                   onClick={() => deleteReminder(reminder.id)}
-                  className="text-red-500 hover:text-red-700 p-1"
+                  className="text-red-600 hover:text-red-800 p-2"
                 >
                   <TrashIcon className="h-5 w-5" />
                 </button>
