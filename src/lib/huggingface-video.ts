@@ -2,12 +2,7 @@
 import { HfInference } from "@huggingface/inference";
 
 // Inisialisasi Hugging Face Inference client
-const HUGGING_FACE_API_TOKEN = process.env.HUGGING_FACE_TOKEN;
-
-// --- LANGKAH DEBUGGING TAMBAHAN ---
-console.log(`[huggingface-video.ts] Initializing HfInference. Token found: ${!!HUGGING_FACE_API_TOKEN}, First 5 chars: ${HUGGING_FACE_API_TOKEN?.substring(0, 5)}...`);
-// --- AKHIR LANGKAH DEBUGGING ---
-
+const HUGGING_FACE_API_TOKEN = process.env.NEXT_PUBLIC_HUGGING_FACE_TOKEN;
 const hf = new HfInference(HUGGING_FACE_API_TOKEN);
 
 // URL model text-to-video di Hugging Face.
@@ -21,7 +16,7 @@ const VIDEO_GENERATION_MODEL = "cerspense/zeroscope-v2-xl";
  */
 export async function generateVideoFromHuggingFace(prompt: string): Promise<Blob> {
   if (!HUGGING_FACE_API_TOKEN) {
-    throw new Error("Hugging Face API token is not configured. Please add HUGGING_FACE_TOKEN to your .env file.");
+    throw new Error("Hugging Face API token is not configured. Please add NEXT_PUBLIC_HUGGING_FACE_TOKEN to your .env file.");
   }
 
   console.log("Starting video generation with Hugging Face Inference Client for prompt:", prompt);

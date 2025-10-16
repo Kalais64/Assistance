@@ -9,11 +9,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { moduleId, script } = body;
 
-    // --- LANGKAH DEBUGGING ---
-    const token = process.env.HUGGING_FACE_TOKEN;
-    console.log(`[API Route Debug] Token Ditemukan: ${!!token}, 5 Karakter Pertama: ${token?.substring(0, 5)}...`);
-    // --- AKHIR LANGKAH DEBUGGING ---
-
     if (!moduleId || !script) {
       return NextResponse.json({ error: 'Missing moduleId or script' }, { status: 400 });
     }
