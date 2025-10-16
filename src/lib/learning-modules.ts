@@ -27,14 +27,17 @@ export async function generateQuiz(topic: string, grade: string): Promise<any[]>
     const response = await result.response;
     const text = response.text();
     
+    // Membersihkan respons dari blok kode markdown
+    const cleanedText = text.replace(/```json\n|```/g, '').trim();
+
     try {
-      // Try to parse the response as JSON
-      const parsedQuiz = JSON.parse(text);
+      // Mencoba mengurai respons yang sudah dibersihkan sebagai JSON
+      const parsedQuiz = JSON.parse(cleanedText);
       return Array.isArray(parsedQuiz) ? parsedQuiz : [];
     } catch (e) {
       console.error('Failed to parse quiz data:', e);
-      // If parsing fails, try to extract JSON from the text
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      // Jika penguraian gagal, coba ekstrak JSON dari teks
+      const jsonMatch = cleanedText.match(/\\[[\\s\\S]*\\]/);
       if (jsonMatch) {
         try {
           const extractedJson = JSON.parse(jsonMatch[0]);

@@ -10,14 +10,15 @@ import { getMessaging, isSupported } from 'firebase/messaging';
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCr9VZAEde6SOb1hWyyw9ODkFWtaE8LnbI",
-  authDomain: "personal-learning-assistant-b8b8a.firebaseapp.com",
-  projectId: "personal-learning-assistant-b8b8a",
-  storageBucket: "personal-learning-assistant-b8b8a.firebasestorage.app",
-  messagingSenderId: "889381252515",
-  appId: "1:889381252515:web:5217869334b69b3415be16",
-  measurementId: "G-L7P3NBYRF7"
+  apiKey: "AIzaSyAtdecF1FOimB8n4fx2QdQcqJpa9tCUUUA",
+  authDomain: "assistance-19a41.firebaseapp.com",
+  projectId: "assistance-19a41",
+  storageBucket: "assistance-19a41.firebasestorage.app",
+  messagingSenderId: "699616491811",
+  appId: "1:699616491811:web:4fbdc4a09040c59bd5f496",
+  measurementId: "G-T35WL7Q8ED"
 };
+
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

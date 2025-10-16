@@ -38,8 +38,9 @@ export const getGeminiModel = () => {
   if (!genAI) {
     throw new Error('Failed to initialize Gemini API client. Please check your connection and API key.');
   }
+  // GUNAKAN: Model 'gemini-flash-lite-latest' yang lebih baru dan cepat.
   return genAI.getGenerativeModel({ 
-    model: 'gemini-pro',
+    model: 'gemini-flash-lite-latest',
     safetySettings 
   });
 };
@@ -52,8 +53,9 @@ export const getGeminiVisionModel = () => {
   if (!genAI) {
     throw new Error('Failed to initialize Gemini API client. Please check your connection and API key.');
   }
+  // GUNAKAN: Model 'gemini-flash-lite-latest' juga bisa menangani gambar (multimodal).
   return genAI.getGenerativeModel({ 
-    model: 'gemini-pro-vision',
+    model: 'gemini-flash-lite-latest',
     safetySettings 
   });
 };

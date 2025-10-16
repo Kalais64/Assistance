@@ -1,30 +1,69 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { generateTutorial, generateQuiz, generateVideoScript, generateImageDescription } from '@/lib/learning-modules';
 import ImageGenerator from '@/components/learning/ImageGenerator';
-import { BookOpenIcon, AcademicCapIcon, VideoCameraIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { BookOpenIcon, AcademicCapIcon, VideoCameraIcon, DocumentTextIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import { useAuth } from '@/contexts/AuthContext';
+import { learningModulesService, FirebaseLearningModule } from '@/lib/firestore';
+import { useNotifications } from '@/hooks/useNotifications';
 
 function LearningModulesContent() {
+  const { currentUser: user } = useAuth();
+  const { showSuccess, showError, showInfo } = useNotifications();
+
+  // State untuk input
   const [topic, setTopic] = useState('');
   const [grade, setGrade] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('tutorial');
-  
-  const [tutorialContent, setTutorialContent] = useState('');
+
+  // State untuk konten yang ditampilkan
+  const [currentModule, setCurrentModule] = useState<Partial<FirebaseLearningModule> | null>(null);
   const [quizData, setQuizData] = useState<any[]>([]);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [videoGenerationError, setVideoGenerationError] = useState('');
+  
+  // State untuk kuis
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   
-  // Video state
-  const [videoScript, setVideoScript] = useState('');
-  const [videoImageUrl, setVideoImageUrl] = useState('');
-  const [imageDescription, setImageDescription] = useState('');
+  // State untuk modul yang disimpan
+  const [savedModules, setSavedModules] = useState<FirebaseLearningModule[]>([]);
+
+  // Memuat modul yang disimpan dari Firestore
+  useEffect(() => {
+    if (user) {
+      const unsubscribe = learningModulesService.subscribeToLearningModules(user.uid, (modules) => {
+        setSavedModules(modules);
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
+
+  // Fungsi untuk memuat konten dari modul yang dipilih
+  const loadModule = (module: Partial<FirebaseLearningModule>) => {
+    setCurrentModule(module);
+    try {
+      if (module.quizData) {
+        setQuizData(JSON.parse(module.quizData));
+      } else {
+        setQuizData([]);
+      }
+    } catch (e) {
+      console.error("Failed to parse quiz data:", e);
+      setQuizData([]);
+    }
+    setActiveTab('tutorial');
+    resetQuiz();
+    setShowResults(false);
+    setVideoGenerationError('');
+  };
   
   const handleGeneration = async () => {
     if (!topic || !grade) {
@@ -34,10 +73,10 @@ function LearningModulesContent() {
 
     setIsLoading(true);
     setError('');
-    setShowResults(false);
+    setCurrentModule(null);
+    setQuizData([]);
 
     try {
-      // Generate content in parallel for better performance
       const [tutorialResponse, quizResponse, videoScriptResponse, imageDescResponse] = await Promise.all([
         generateTutorial(topic, grade),
         generateQuiz(topic, grade),
@@ -45,26 +84,29 @@ function LearningModulesContent() {
         generateImageDescription(topic, grade)
       ]);
       
-      // Set the tutorial content
-      setTutorialContent(tutorialResponse);
-      
-      // Set the quiz data
-      setQuizData(quizResponse);
-      
-      // Set the video content
-      setVideoScript(videoScriptResponse);
-      setImageDescription(imageDescResponse);
-      
-      // For demo purposes, we'll use a placeholder image
-      setVideoImageUrl('/file.svg');
-      
-      setShowResults(true);
-      setCurrentQuestionIndex(0);
-      setScore(0);
+      const newModuleData = {
+        topic,
+        grade,
+        tutorialContent: tutorialResponse,
+        quizData: JSON.stringify(quizResponse), // Simpan sebagai string
+        videoScript: videoScriptResponse,
+        imageDescription: imageDescResponse,
+      };
+
+      // Simpan ke Firestore jika user login
+      if (user) {
+        const moduleId = await learningModulesService.addLearningModule(user.uid, newModuleData);
+        loadModule({ ...newModuleData, id: moduleId }); // Muat modul dengan ID baru
+        showSuccess('Module Saved', 'Your new learning module has been saved to your account.');
+      } else {
+        loadModule(newModuleData); // Muat modul tanpa ID jika tidak login
+        showInfo('Login to Save', 'Sign in to save your generated modules permanently.');
+      }
       
     } catch (error) {
       console.error('Generation failed:', error);
       setError('An error occurred during content generation. Please try again.');
+      showError('Generation Failed', 'Could not generate the learning module.');
     } finally {
       setIsLoading(false);
     }
@@ -79,14 +121,12 @@ function LearningModulesContent() {
       setScore(score + 1);
     }
     
-    // Move to next question after a short delay
     setTimeout(() => {
       if (currentQuestionIndex < quizData.length - 1) {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
         setSelectedAnswer(null);
         setIsCorrect(null);
       } else {
-        // Show final results when all questions are answered
         setShowResults(true);
       }
     }, 1500);
@@ -101,7 +141,7 @@ function LearningModulesContent() {
   };
 
   const renderTutorial = () => {
-    if (!tutorialContent && !isLoading) {
+    if (!currentModule?.tutorialContent && !isLoading) {
       return (
         <div className="text-center py-10 bg-blue-50 rounded-lg">
           <BookOpenIcon className="h-16 w-16 mx-auto text-blue-500 mb-4" />
@@ -117,7 +157,7 @@ function LearningModulesContent() {
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
           </div>
         ) : (
-          <div className="bg-white p-6 rounded-lg shadow-md" dangerouslySetInnerHTML={{ __html: tutorialContent }} />
+          <div className="bg-white p-6 rounded-lg shadow-md" dangerouslySetInnerHTML={{ __html: currentModule?.tutorialContent || '' }} />
         )}
       </div>
     );
@@ -141,7 +181,7 @@ function LearningModulesContent() {
       );
     }
 
-    if (showResults && currentQuestionIndex === quizData.length - 1) {
+    if (showResults) {
       return (
         <div className="bg-white p-6 rounded-lg shadow-md text-center">
           <h3 className="text-2xl font-bold mb-4">Quiz Results</h3>
@@ -164,6 +204,7 @@ function LearningModulesContent() {
     }
 
     const currentQuestion = quizData[currentQuestionIndex];
+    if (!currentQuestion) return null;
     
     return (
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -203,7 +244,7 @@ function LearningModulesContent() {
   };
 
   const renderVideo = () => {
-    if (!videoScript && !isLoading) {
+    if (!currentModule?.videoScript && !isLoading) {
       return (
         <div className="text-center py-10 bg-blue-50 rounded-lg">
           <VideoCameraIcon className="h-16 w-16 mx-auto text-blue-500 mb-4" />
@@ -220,24 +261,15 @@ function LearningModulesContent() {
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="aspect-w-16 aspect-h-9 bg-blue-100 flex items-center justify-center">
-              {videoImageUrl ? (
-                <img src={videoImageUrl} alt="Video thumbnail" className="w-full h-64 object-contain" />
-              ) : (
-                <VideoCameraIcon className="h-20 w-20 text-blue-500" />
-              )}
-            </div>
             <div className="p-6">
               <h3 className="text-xl font-semibold mb-2">Video Script</h3>
-              <div className="prose max-w-none">
-                <p className="whitespace-pre-line">{videoScript}</p>
+              <div className="prose max-w-none mb-6">
+                <p className="whitespace-pre-line">{currentModule?.videoScript}</p>
               </div>
-              <div className="mt-4">
-                <ImageGenerator 
-                    description={imageDescription} 
-                    placeholderImage="/api/placeholder/400/300"
-                  />
-              </div>
+              <ImageGenerator 
+                  description={currentModule?.imageDescription || ''}
+                  placeholderImage="https://placehold.co/600x400/EBF4FF/76A9FA?text=Click+Generate+Image"
+                />
             </div>
           </div>
         )}
@@ -246,110 +278,135 @@ function LearningModulesContent() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-blue-700 mb-2">Learning Modules</h1>
-        <p className="text-gray-600">Generate personalized learning content with AI</p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label htmlFor="topic" className="block text-sm font-medium text-gray-700 mb-1">
-              Learning Topic
-            </label>
-            <input
-              type="text"
-              id="topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g., Photosynthesis, World War II, Algebra"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="grade" className="block text-sm font-medium text-gray-700 mb-1">
-              Grade Level
-            </label>
-            <select
-              id="grade"
-              value={grade}
-              onChange={(e) => setGrade(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select grade level</option>
-              <option value="elementary">Elementary School</option>
-              <option value="middle">Middle School</option>
-              <option value="high">High School</option>
-              <option value="college">College</option>
-            </select>
-          </div>
+    <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-8">
+      {/* Kolom utama */}
+      <div className="lg:col-span-3">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-blue-700 mb-2">Learning Modules</h1>
+          <p className="text-gray-600">Generate personalized learning content with AI</p>
         </div>
-        
-        <button
-          onClick={handleGeneration}
-          disabled={isLoading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors disabled:bg-blue-300"
-        >
-          {isLoading ? 'Generating...' : 'Generate Learning Content'}
-        </button>
-        
-        {error && <p className="mt-2 text-red-600 text-sm">{error}</p>}
-      </div>
 
-      {(tutorialContent || quizData.length > 0 || videoScript || isLoading) && (
-        <div className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-6">
-              <button
-                onClick={() => setActiveTab('tutorial')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'tutorial'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label htmlFor="topic" className="block text-sm font-medium text-gray-700 mb-1">
+                Learning Topic
+              </label>
+              <input
+                type="text"
+                id="topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g., Photosynthesis"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="grade" className="block text-sm font-medium text-gray-700 mb-1">
+                Grade Level
+              </label>
+              <select
+                id="grade"
+                value={grade}
+                onChange={(e) => setGrade(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <div className="flex items-center">
-                  <DocumentTextIcon className="h-5 w-5 mr-2" />
-                  Tutorial
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('quiz')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'quiz'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center">
-                  <AcademicCapIcon className="h-5 w-5 mr-2" />
-                  Quiz
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('video')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'video'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center">
-                  <VideoCameraIcon className="h-5 w-5 mr-2" />
-                  Video
-                </div>
-              </button>
-            </nav>
+                <option value="">Select grade level</option>
+                <option value="elementary">Elementary School</option>
+                <option value="middle">Middle School</option>
+                <option value="high">High School</option>
+                <option value="college">College</option>
+              </select>
+            </div>
           </div>
           
-          <div className="mt-6">
-            {activeTab === 'tutorial' && renderTutorial()}
-            {activeTab === 'quiz' && renderQuiz()}
-            {activeTab === 'video' && renderVideo()}
-          </div>
+          <button
+            onClick={handleGeneration}
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors disabled:bg-blue-300"
+          >
+            {isLoading ? 'Generating...' : 'Generate & Save Module'}
+          </button>
+          
+          {error && <p className="mt-2 text-red-600 text-sm">{error}</p>}
         </div>
-      )}
+
+        {currentModule && (
+          <div className="mb-6">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-6">
+                <button
+                  onClick={() => setActiveTab('tutorial')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                    activeTab === 'tutorial'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <DocumentTextIcon className="h-5 w-5" /> Tutorial
+                </button>
+                <button
+                  onClick={() => setActiveTab('quiz')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                    activeTab === 'quiz'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <AcademicCapIcon className="h-5 w-5" /> Quiz
+                </button>
+                <button
+                  onClick={() => setActiveTab('video')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                    activeTab === 'video'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <VideoCameraIcon className="h-5 w-5" /> Video Materials
+                </button>
+              </nav>
+            </div>
+            
+            <div className="mt-6">
+              {activeTab === 'tutorial' && renderTutorial()}
+              {activeTab === 'quiz' && renderQuiz()}
+              {activeTab === 'video' && renderVideo()}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Kolom sidebar untuk modul yang disimpan */}
+      <div className="lg:col-span-1">
+        <div className="bg-white rounded-lg shadow-md p-4 sticky top-24">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <ArchiveBoxIcon className="h-6 w-6 text-blue-600" />
+            Saved Modules
+          </h2>
+          {user ? (
+            savedModules.length > 0 ? (
+              <ul className="space-y-2 max-h-96 overflow-y-auto">
+                {savedModules.map(module => (
+                  <li key={module.id}>
+                    <button 
+                      onClick={() => loadModule(module)}
+                      className="w-full text-left p-3 rounded-md hover:bg-blue-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <p className="font-medium text-sm text-gray-900">{module.topic}</p>
+                      <p className="text-xs text-gray-500">{module.grade}</p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No saved modules yet. Generate one to get started!</p>
+            )
+          ) : (
+            <p className="text-sm text-gray-500 p-3 bg-yellow-50 border border-yellow-200 rounded-md">Please sign in to view and manage your saved modules.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
