@@ -3,8 +3,23 @@ import { generateVideoFromHuggingFace } from '@/lib/huggingface-video';
 import { storage } from '@/lib/firebase';
 import { learningModulesService } from '@/lib/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { HfInference } from "@huggingface/inference";
 
 export async function POST(request: NextRequest) {
+  // --- LANGKAH DEBUGGING ---
+  // Kita akan mencetak token di sini untuk memastikan server bisa membacanya.
+  // Periksa terminal Anda (bukan browser) setelah menekan tombol "Generate Video".
+  const token = process.env.HUGGING_FACE_TOKEN;
+  console.log("Mencoba membaca token Hugging Face di sisi server:", token ? `Token DITEMUKAN (panjang: ${token.length})` : "Token TIDAK DITEMUKAN (undefined)");
+  // -------------------------
+  
+  if (!token) {
+    return NextResponse.json({ error: "Hugging Face token tidak ditemukan di server. Pastikan HUGGING_FACE_TOKEN ada di .env.local dan server sudah di-restart." }, { status: 500 });
+  }
+
+  // Inisialisasi HfInference langsung di sini
+  const hf = new HfInference(token);
+
   try {
     const body = await request.json();
     const { moduleId, script } = body;
@@ -13,8 +28,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing moduleId or script' }, { status: 400 });
     }
 
-    // 1. Generate video from Hugging Face
-    const videoBlob = await generateVideoFromHuggingFace(script);
+    // 1. Generate video (sekarang kita passing instance 'hf')
+    const videoBlob = await generateVideoFromHuggingFace(hf, script);
 
     // 2. Upload video to Firebase Storage
     const videoFileName = `${moduleId}-${Date.now()}.mp4`;
@@ -22,7 +37,7 @@ export async function POST(request: NextRequest) {
     const uploadResult = await uploadBytes(storageRef, videoBlob);
     const videoUrl = await getDownloadURL(uploadResult.ref);
 
-    // 3. Update Firestore with the new video URL
+    // 3. Update Firestore
     await learningModulesService.updateLearningModule(moduleId, { 
       generatedVideoUrl: videoUrl 
     });
@@ -34,3 +49,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to generate video' }, { status: 500 });
   }
 }
+

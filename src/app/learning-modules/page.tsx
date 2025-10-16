@@ -46,6 +46,24 @@ function LearningModulesContent() {
     }
   }, [user]);
 
+  // FUNGSI BARU UNTUK TES
+  const handleTestHuggingFace = async () => {
+    console.log("Mencoba memanggil /api/test-hf...");
+    showInfo("Testing HF Token...", "Mencoba otentikasi dengan model lain.");
+    try {
+      const response = await fetch('/api/test-hf', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Tes gagal.');
+      }
+      console.log("Hasil Tes HF:", data);
+      showSuccess("Tes Berhasil!", "Token Anda valid dan berfungsi.");
+    } catch (err: any) {
+      console.error("Kesalahan saat tes HF:", err);
+      showError("Tes Gagal!", err.message);
+    }
+  };
+
   // Fungsi untuk memuat konten dari modul yang dipilih
   const loadModule = (module: Partial<FirebaseLearningModule>) => {
     setCurrentModule(module);
@@ -327,6 +345,15 @@ function LearningModulesContent() {
           >
             {isLoading ? 'Generating...' : 'Generate & Save Module'}
           </button>
+          
+          {/* === TOMBOL TES BARU DI SINI === */}
+          <button
+            onClick={handleTestHuggingFace}
+            className="w-full mt-4 bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+          >
+            Jalankan Tes Otentikasi Hugging Face
+          </button>
+          {/* ============================== */}
           
           {error && <p className="mt-2 text-red-600 text-sm">{error}</p>}
         </div>
